@@ -129,80 +129,92 @@
         }
 
         function updateTableFromData() {
-            const index = document.getElementById('gameSelect').value;
-            const game = gameData[index];
-            const tableBody = document.querySelector('#prizeTable tbody');
-            tableBody.innerHTML = '';
+    const index = document.getElementById('gameSelect').value;
+    const game = gameData[index];
+    const tableBody = document.querySelector('#prizeTable tbody');
+    tableBody.innerHTML = '';
 
-            if (game && game.OddsTiers) {
-                const bottomTier = game.OddsTiers[game.OddsTiers.length - 1];
-                const estTicketsRemaining = bottomTier.PrizesRemaining * parseInt(bottomTier.WinningOdds.split('-in-')[1]);
-                let currentEV = 0, totalWinProb = 0;
-                let coldMidTiers = [];
+    if (game && game.OddsTiers) {
+        // --- CALCULATION LOGIC ---
+        const bottomTier = game.OddsTiers[game.OddsTiers.length - 1];
+        const estTicketsRemaining = bottomTier.PrizesRemaining * parseInt(bottomTier.WinningOdds.split('-in-')[1]);
+        let currentEV = 0, totalWinProb = 0;
 
-                game.OddsTiers.forEach(tier => {
-                    const prizeVal = parseFloat(tier.PrizeAmount.replace(/[$,]/g, ''));
-                    const prob = tier.PrizesRemaining / estTicketsRemaining;
-                    currentEV += (prizeVal * prob);
-                    totalWinProb += prob;
+        game.OddsTiers.forEach(tier => {
+            const prizeVal = parseFloat(tier.PrizeAmount.replace(/[$,]/g, ''));
+            const prob = tier.PrizesRemaining / estTicketsRemaining;
+            currentEV += (prizeVal * prob);
+            totalWinProb += prob;
 
-                    const originalRatio = tier.TotalPrizes / game.OddsTiers.reduce((a, b) => a + b.TotalPrizes, 0);
-                    const currentRatio = tier.PrizesRemaining / game.OddsTiers.reduce((a, b) => a + b.PrizesRemaining, 0);
-                    const luckScore = (currentRatio / originalRatio);
+            const originalRatio = tier.TotalPrizes / game.OddsTiers.reduce((a, b) => a + b.TotalPrizes, 0);
+            const currentRatio = tier.PrizesRemaining / game.OddsTiers.reduce((a, b) => a + b.PrizesRemaining, 0);
+            const luckScore = (currentRatio / originalRatio);
 
-                    const tr = document.createElement('tr');
-                    let luckEmoji = "";
-                    if (luckScore > 1.2) {
-                        tr.style = 'background: rgba(0, 255, 0, 0.1);';
-                        luckEmoji = "🔥 ";
-                    } else if (luckScore < 0.8) {
-                        tr.style = 'opacity: 0.7;';
-                        luckEmoji = "❄️ ";
-                        if (prizeVal >= 100 && prizeVal <= 500) coldMidTiers.push(`${tier.PrizeAmount}`);
-                    }
-
-                    tr.innerHTML = `
-                        <td class="prize-amt">${tier.PrizeAmount}</td>
-                        <td>${tier.WinningOdds}</td>
-                        <td>${tier.PrizesRemaining}</td>
-                        <td style="font-weight:bold; color:${luckScore > 1 ? '#4af626' : '#ff4444'}">
-                            ${luckEmoji}${luckScore.toFixed(2)}x
-                        </td>`;
-                    tableBody.appendChild(tr);
-                });
-
-                const price = game.TicketPrice;
-                const loss = price - currentEV;
-                const roi = currentEV / price;
-                const houseEdge = ((loss / price) * 100).toFixed(0);
-
-                document.getElementById('statPrice').innerText = `$${price}`;
-                document.getElementById('statEV').innerText = `$${currentEV.toFixed(2)}`;
-                document.getElementById('statProb').innerText = `${(totalWinProb * 100).toFixed(2)}%`;
-                document.getElementById('statLoss').innerText = `-$${Math.abs(loss).toFixed(2)}`;
-
-                const vBox = document.getElementById('verdictBox');
-                const ratHeader = document.querySelector('.rationale-header');
-                const ratContent = document.getElementById('rationaleContent');
-
-                if (roi >= 0.80) {
-                    vBox.innerText = "BUY"; vBox.className = "verdict-box buy";
-                    ratHeader.innerText = `Why the Math says "BUY"`;
-                    ratContent.innerHTML = `<div class="rationale-text">A-Tier Metrics: The ROI of ${(roi*100).toFixed(1)}% is superior to standard launch odds. Play with confidence.</div>`;
-                } else if (roi >= 0.72) {
-                    vBox.innerText = "CAUTION"; vBox.className = "verdict-box caution";
-                    ratHeader.innerText = `Why the Math says "CAUTION"`;
-                    ratContent.innerHTML = `<div class="rationale-text">Standard Odds: ROI is at ${(roi*100).toFixed(1)}%. This is within the normal "playable" range for a standard session.</div>`;
-                } else {
-                    vBox.innerText = "SKIP"; vBox.className = "verdict-box skip";
-                    ratHeader.innerText = `Why the Math says "SKIP"`;
-                    ratContent.innerHTML = `
-                        <span class="rationale-sub">Depleted Pool:</span>
-                        <div class="rationale-text">The ROI has dropped to ${(roi * 100).toFixed(1)}%. This game has a high house edge of ~${houseEdge}%. Better options exist.</div>
-                    `;
-                }
+            const tr = document.createElement('tr');
+            let luckEmoji = "";
+            if (luckScore > 1.2) {
+                tr.style = 'background: rgba(0, 255, 0, 0.1);';
+                luckEmoji = "🔥 ";
+            } else if (luckScore < 0.8) {
+                tr.style = 'opacity: 0.7;';
+                luckEmoji = "❄️ ";
             }
+
+            tr.innerHTML = `
+                <td class="prize-amt">${tier.PrizeAmount}</td>
+                <td>${tier.WinningOdds}</td>
+                <td>${tier.PrizesRemaining}</td>
+                <td style="font-weight:bold; color:${luckScore > 1 ? '#4af626' : '#ff4444'}">
+                    ${luckEmoji}${luckScore.toFixed(2)}x
+                </td>`;
+            tableBody.appendChild(tr);
+        });
+
+        const price = game.TicketPrice;
+        const loss = price - currentEV;
+        const roi = currentEV / price;
+        const houseEdge = ((loss / price) * 100).toFixed(0);
+
+        // --- UPDATE STATS ---
+        document.getElementById('statPrice').innerText = `$${price}`;
+        document.getElementById('statEV').innerText = `$${currentEV.toFixed(2)}`;
+        document.getElementById('statProb').innerText = `${(totalWinProb * 100).toFixed(2)}%`;
+        document.getElementById('statLoss').innerText = `-$${Math.abs(loss).toFixed(2)}`;
+
+        // --- DYNAMIC VERDICT & LINK ---
+        const vBox = document.getElementById('verdictBox');
+        const ratHeader = document.querySelector('.rationale-header');
+        const ratContent = document.getElementById('rationaleContent');
+        
+        // Define the redirect URL using the Game ID
+        const gameUrl = `https://floridalottery.com/games/scratch-offs/view?id=${game.Id}`;
+        
+        let verdictText = "";
+        let verdictClass = "";
+        let rationale = "";
+
+        if (roi >= 0.80) {
+            verdictText = "BUY"; 
+            verdictClass = "verdict-box buy";
+            rationale = `A-Tier Metrics: The ROI of ${(roi*100).toFixed(1)}% is superior to standard launch odds.`;
+        } else if (roi >= 0.72) {
+            verdictText = "CAUTION"; 
+            verdictClass = "verdict-box caution";
+            rationale = `Standard Odds: ROI is at ${(roi*100).toFixed(1)}%. Within normal playable range.`;
+        } else {
+            verdictText = "SKIP"; 
+            verdictClass = "verdict-box skip";
+            rationale = `Depleted Pool: ROI dropped to ${(roi * 100).toFixed(1)}%. House edge is ~${houseEdge}%.`;
         }
+
+        // Apply styles and turn the box into a clickable link
+        vBox.className = verdictClass;
+        vBox.innerHTML = `<a href="${gameUrl}" target="_blank" style="text-decoration:none; color:inherit; display:block; width:100%; height:100%;">${verdictText}</a>`;
+        
+        ratHeader.innerText = `Why the Math says "${verdictText}"`;
+        ratContent.innerHTML = `<div class="rationale-text">${rationale}</div>`;
+    }
+}
 
         async function startMap() {
             const index = document.getElementById('gameSelect').value;
@@ -234,3 +246,4 @@
     </script>
 </body>
 </html>
+
