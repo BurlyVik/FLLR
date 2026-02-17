@@ -1,0 +1,236 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <title>FL Lottery Insight - Strategic Data Sync</title>
+    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+    <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.4.120/pdf.min.js"></script>
+    <style>
+        body { margin: 0; font-family: 'Segoe UI', sans-serif; display: flex; height: 100vh; background: #121212; color: #eee; overflow: hidden; }
+        #sidebar { width: 420px; padding: 20px; background: #1c1c1c; border-right: 1px solid #333; overflow-y: auto; display: flex; flex-direction: column; gap: 15px; }
+        #map { flex: 1; background: #222; }
+        #analysis-panel { width: 320px; padding: 20px; background: #161616; border-left: 1px solid #333; overflow-y: auto; display: flex; flex-direction: column; }
+        
+        .card { background: #252525; padding: 15px; border-radius: 8px; border: 1px solid #333; }
+        textarea { width: 100%; height: 80px; background: #121212; color: #4af626; border: 1px solid #444; font-size: 11px; padding: 8px; box-sizing: border-box; }
+        select { width: 100%; padding: 10px; background: #333; color: white; border: 1px solid #444; border-radius: 4px; margin-top: 10px; }
+        button { width: 100%; padding: 10px; background: #0078d4; color: white; border: none; border-radius: 4px; cursor: pointer; font-weight: bold; margin-top: 10px; }
+        
+        .verdict-box { text-align: center; padding: 12px; border-radius: 8px; font-weight: 900; font-size: 26px; border: 2px solid; margin-bottom: 15px; letter-spacing: 2px; }
+        .buy { color: #4af626; border-color: #4af626; background: rgba(74, 246, 38, 0.05); }
+        .caution { color: #f39c12; border-color: #f39c12; background: rgba(243, 156, 18, 0.05); }
+        .skip { color: #ff4444; border-color: #ff4444; background: rgba(255, 68, 68, 0.05); }
+
+        .stat-row { display: flex; justify-content: space-between; align-items: baseline; margin-bottom: 10px; font-family: monospace; font-size: 15px; }
+        .stat-label { color: #888; font-size: 13px; text-transform: uppercase; }
+        .stat-dots { flex: 1; border-bottom: 1px dotted #444; margin: 0 8px; }
+        .stat-value { color: #4af626; font-weight: bold; font-size: 18px; }
+        .loss { color: #ff4444; }
+
+        .rationale-container { margin-top: 15px; font-size: 14px; line-height: 1.6; color: #ccc; }
+        .rationale-header { color: #f39c12; font-size: 13px; font-weight: bold; margin-bottom: 10px; text-transform: uppercase; border-bottom: 1px solid #333; padding-bottom: 6px; }
+        .rationale-sub { color: #ff4444; font-weight: bold; margin-top: 12px; display: block; font-size: 15px; }
+        .rationale-text { color: #bbb; margin-bottom: 12px; }
+        .peer-box { background: #222; padding: 10px; border-radius: 4px; border-left: 3px solid #0078d4; font-size: 13px; margin-top: 12px; color: #aaa; }
+
+        table { width: 100%; border-collapse: collapse; font-size: 11px; margin-top: 10px; }
+        th { text-align: left; color: #888; border-bottom: 2px solid #333; padding: 5px; }
+        td { padding: 8px 5px; border-bottom: 1px solid #333; }
+        .prize-amt { color: #4af626; font-weight: bold; }
+    </style>
+</head>
+
+<body>
+
+    <div id="sidebar">
+        <h2 style="color: #f39c12; margin: 0;">FL Lottery Insight</h2>
+        <div class="card">
+            <strong>1. Load Comprehensive JSON</strong>
+            <textarea id="jsonInput" placeholder="Paste the JSON here..."></textarea>
+            <button onclick="loadData()">Initialize System</button>
+        </div>
+        <div id="gameUI" style="display:none;" class="card">
+            <strong>2. Active Game</strong>
+            <select id="gameSelect" onchange="updateTableFromData()"></select>
+            <div id="tableContainer">
+                <table id="prizeTable">
+                    <thead>
+                        <tr><th>Prize</th><th>Odds</th><th>Remaining</th><th>Luck</th></tr>
+                    </thead>
+                    <tbody></tbody>
+                </table>
+            </div>
+        </div>
+        <div id="log" style="font-size:11px; color:#666;">Ready.</div>
+        <div id="mapUI" style="display:none;" class="card">
+            <strong>3. Scan Locations</strong>
+            <button onclick="startMap()" style="background:#6f42c1;">Scan Claims PDF</button>
+        </div>
+    </div>
+
+    <div id="map"></div>
+
+    <div id="analysis-panel">
+        <h3 style="color:#f39c12; font-size:12px; margin-bottom: 10px; letter-spacing: 1px;">STRATEGIC VERDICT</h3>
+        <div id="verdictBox" class="verdict-box">--</div>
+
+        <div class="card" style="padding: 12px 15px;">
+            <div class="stat-row">
+                <span class="stat-label">Ticket</span><div class="stat-dots"></div><span id="statPrice" class="stat-value">$0.00</span>
+            </div>
+            <div class="stat-row">
+                <span class="stat-label">EV</span><div class="stat-dots"></div><span id="statEV" class="stat-value">$0.00</span>
+            </div>
+            <div class="stat-row">
+                <span class="stat-label">Win Prob</span><div class="stat-dots"></div><span id="statProb" class="stat-value">0.00%</span>
+            </div>
+            <div class="stat-row" style="margin-bottom: 0;">
+                <span class="stat-label">Net Loss</span><div class="stat-dots"></div><span id="statLoss" class="stat-value loss">$0.00</span>
+            </div>
+        </div>
+
+        <div id="rationaleContainer" class="rationale-container">
+            <div class="rationale-header">Why the Math says "--"</div>
+            <div id="rationaleContent"></div>
+        </div>
+    </div>
+
+    <script>
+        const PROXY = "https://corsproxy.io/?";
+        pdfjsLib.GlobalWorkerOptions.workerSrc = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.4.120/pdf.worker.min.js';
+        let gameData = [];
+        
+        // REVERTED TO HIGH-PERFORMANCE DARK MODE (CartoDB)
+        const map = L.map('map').setView([27.9944, -81.7603], 7);
+        L.tileLayer('https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png', {
+            attribution: '&copy; OpenStreetMap &copy; CARTO',
+            subdomains: 'abcd',
+            maxZoom: 20
+        }).addTo(map);
+        
+        let markers = L.layerGroup().addTo(map);
+
+        function loadData() {
+            try {
+                gameData = JSON.parse(document.getElementById('jsonInput').value);
+                const select = document.getElementById('gameSelect');
+                select.innerHTML = '';
+                gameData.forEach((g, index) => {
+                    let opt = document.createElement('option');
+                    opt.value = index; opt.textContent = `${g.Id} - ${g.GameName}`;
+                    select.appendChild(opt);
+                });
+                document.getElementById('gameUI').style.display = 'block';
+                document.getElementById('mapUI').style.display = 'block';
+                updateTableFromData();
+            } catch (e) { alert("Invalid JSON."); }
+        }
+
+        function updateTableFromData() {
+            const index = document.getElementById('gameSelect').value;
+            const game = gameData[index];
+            const tableBody = document.querySelector('#prizeTable tbody');
+            tableBody.innerHTML = '';
+
+            if (game && game.OddsTiers) {
+                const bottomTier = game.OddsTiers[game.OddsTiers.length - 1];
+                const estTicketsRemaining = bottomTier.PrizesRemaining * parseInt(bottomTier.WinningOdds.split('-in-')[1]);
+                let currentEV = 0, totalWinProb = 0;
+                let coldMidTiers = [];
+
+                game.OddsTiers.forEach(tier => {
+                    const prizeVal = parseFloat(tier.PrizeAmount.replace(/[$,]/g, ''));
+                    const prob = tier.PrizesRemaining / estTicketsRemaining;
+                    currentEV += (prizeVal * prob);
+                    totalWinProb += prob;
+
+                    const originalRatio = tier.TotalPrizes / game.OddsTiers.reduce((a, b) => a + b.TotalPrizes, 0);
+                    const currentRatio = tier.PrizesRemaining / game.OddsTiers.reduce((a, b) => a + b.PrizesRemaining, 0);
+                    const luckScore = (currentRatio / originalRatio);
+
+                    const tr = document.createElement('tr');
+                    let luckEmoji = "";
+                    if (luckScore > 1.2) {
+                        tr.style = 'background: rgba(0, 255, 0, 0.1);';
+                        luckEmoji = "🔥 ";
+                    } else if (luckScore < 0.8) {
+                        tr.style = 'opacity: 0.7;';
+                        luckEmoji = "❄️ ";
+                        if (prizeVal >= 100 && prizeVal <= 500) coldMidTiers.push(`${tier.PrizeAmount}`);
+                    }
+
+                    tr.innerHTML = `
+                        <td class="prize-amt">${tier.PrizeAmount}</td>
+                        <td>${tier.WinningOdds}</td>
+                        <td>${tier.PrizesRemaining}</td>
+                        <td style="font-weight:bold; color:${luckScore > 1 ? '#4af626' : '#ff4444'}">
+                            ${luckEmoji}${luckScore.toFixed(2)}x
+                        </td>`;
+                    tableBody.appendChild(tr);
+                });
+
+                const price = game.TicketPrice;
+                const loss = price - currentEV;
+                const roi = currentEV / price;
+                const houseEdge = ((loss / price) * 100).toFixed(0);
+
+                document.getElementById('statPrice').innerText = `$${price}`;
+                document.getElementById('statEV').innerText = `$${currentEV.toFixed(2)}`;
+                document.getElementById('statProb').innerText = `${(totalWinProb * 100).toFixed(2)}%`;
+                document.getElementById('statLoss').innerText = `-$${Math.abs(loss).toFixed(2)}`;
+
+                const vBox = document.getElementById('verdictBox');
+                const ratHeader = document.querySelector('.rationale-header');
+                const ratContent = document.getElementById('rationaleContent');
+
+                if (roi >= 0.80) {
+                    vBox.innerText = "BUY"; vBox.className = "verdict-box buy";
+                    ratHeader.innerText = `Why the Math says "BUY"`;
+                    ratContent.innerHTML = `<div class="rationale-text">A-Tier Metrics: The ROI of ${(roi*100).toFixed(1)}% is superior to standard launch odds. Play with confidence.</div>`;
+                } else if (roi >= 0.72) {
+                    vBox.innerText = "CAUTION"; vBox.className = "verdict-box caution";
+                    ratHeader.innerText = `Why the Math says "CAUTION"`;
+                    ratContent.innerHTML = `<div class="rationale-text">Standard Odds: ROI is at ${(roi*100).toFixed(1)}%. This is within the normal "playable" range for a standard session.</div>`;
+                } else {
+                    vBox.innerText = "SKIP"; vBox.className = "verdict-box skip";
+                    ratHeader.innerText = `Why the Math says "SKIP"`;
+                    ratContent.innerHTML = `
+                        <span class="rationale-sub">Depleted Pool:</span>
+                        <div class="rationale-text">The ROI has dropped to ${(roi * 100).toFixed(1)}%. This game has a high house edge of ~${houseEdge}%. Better options exist.</div>
+                    `;
+                }
+            }
+        }
+
+        async function startMap() {
+            const index = document.getElementById('gameSelect').value;
+            const game = gameData[index];
+            markers.clearLayers();
+            try {
+                const url = `https://files.floridalottery.com/exptkt/${game.Id}_WinningTicketInformation.pdf`;
+                const pdf = await pdfjsLib.getDocument(PROXY + encodeURIComponent(url)).promise;
+                let text = "";
+                for (let i = 1; i <= Math.min(pdf.numPages, 5); i++) {
+                    const page = await pdf.getPage(i);
+                    const content = await page.getTextContent();
+                    text += content.items.map(item => item.str).join(" ");
+                }
+                const regex = /([A-Z\s]{3,}),\s?FL\s(\d{5})/g;
+                let match, delay = 0;
+                while ((match = regex.exec(text)) !== null) {
+                    const city = match[1].trim(), zip = match[2];
+                    setTimeout(() => {
+                        fetch(`https://nominatim.openstreetmap.org/search?format=json&q=${city},FL,${zip}`)
+                            .then(r => r.json()).then(data => {
+                                if (data[0]) L.marker([data[0].lat, data[0].lon]).addTo(markers).bindPopup(`<b>${city}</b> winner cluster.`);
+                            });
+                    }, delay);
+                    delay += 1000;
+                }
+            } catch (e) { }
+        }
+    </script>
+</body>
+</html>
